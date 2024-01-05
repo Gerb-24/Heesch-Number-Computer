@@ -1,4 +1,5 @@
 from squareshapes import Square, Polyomino
+from main import Vector2
 
 coords = ([0,0],
      [1,0], [1,-1], [1,1], 
@@ -51,6 +52,22 @@ tile = Polyomino(
 	]
 )
 
+# 2.5 secs
+coords =  [[0, 0],
+		[1, 0], [1, -1],
+		[2, -1], [2, -3],
+		[3, 0], [3, -1], [3, -2], [3, -3],
+		[4, -3],
+		[5, -2], [5, -3],
+		[6, -3]]
+priority = [
+		Vector2(2,-2),
+		Vector2(4,-2),
+		Vector2(6,-2),
+		Vector2(4,-1),
+		Vector2(2,0),
+	]
+
 # 22 secs
 tile = Polyomino(
 	[
@@ -68,6 +85,23 @@ tile = Polyomino(
 		Square(6,2),
 	]
 )
+
+# 22 secs
+coords = [
+		(0, -2),
+		(1, 0), (1, -1), (1, -2),
+		(2, 0), (2, -1), (2, -2),
+		(3, -2),
+		(4, -2), (4, -3),
+		(5, -3),
+	]
+priority = [
+	Vector2(3,-3),
+	Vector2(5,-2),
+	Vector2(0,-1),
+	Vector2(3,-1),
+]
+
 
 # 90 secs
 tile = Polyomino(

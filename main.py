@@ -1,4 +1,8 @@
+from __future__ import annotations
+from typing import List, Tuple, Generator
 from utils import getFirstFromSet
+import time
+
 
 class Vector2:
     def __init__(self, x, y) -> None:
@@ -30,20 +34,26 @@ class Vector2:
         return f'Vector2({self.x},{self.y})'
 
 class Tile:
-    def __init__(self, coords) -> None:
+    def __init__(self, coords, shapeCode: ShapeCode =None , collisionData: CollisionData =None) -> None:
         self.coords = coords
+        self.shapeCode = shapeCode
+        self.collisionData = collisionData
+    
+    def setShapeCode(self, shapeCode: ShapeCode):
+        self.shapeCode = shapeCode
 
-    def translate(self, translation):
-        return Tile(tuple(coord.add(translation) for coord in self.coords))
+    def setCollisionData(self, collisionData: CollisionData):
+        self.collisionData = collisionData
+
+    def getTranslatedTile(self, translation: Vector2) -> Tile:
+        return Tile( translateCoords(self.coords, translation), self.shapeCode.getTranslatedShapeCode(translation), self.collisionData.getTranslatedCollisions(translation) )
+
+    def getFlippedTile(self) -> Tile:
+        return Tile( flipCoords(self.coords), self.shapeCode.getFlippedShapeCode(), self.collisionData.getFlippedCollisions() )
     
-    # computes if two tiles intersect with eachother
-    def doIntersect(self, other):
-        for coord in self.coords:
-            for _coord in other.coords:
-                if coord.equals(_coord):
-                    return True
-        return False
-    
+    def getRotatedTile(self) -> Tile:
+        return Tile( rotateCoords(self.coords), self.shapeCode.getRotatedShapeCode(), self.collisionData.getRotatedCollisions() )
+
     def getBoundary(self, unitVectors):
         counts = []
         boundary = []
@@ -62,6 +72,15 @@ class Tile:
         for index, boundaryCoord in enumerate(boundary):
             boundaryWithPriority[counts[index]].add(boundaryCoord)
         return boundaryWithPriority
+
+    def getBoundaryAsList(self, unitVectors, priority):
+        boundary = priority.copy()
+        for coord in self.coords:
+            for unitVector in unitVectors:
+                boundaryCoord = coord.add(unitVector)
+                if boundaryCoord not in boundary and boundaryCoord not in self.coords:
+                    boundary.append(boundaryCoord)
+        return boundary
 
 class CollisionData:
     def __init__(self, collisions=None) -> None:
@@ -108,7 +127,6 @@ class CollisionData:
         }
         return collisionsForBaseOrientations
 
-
     def getCollisionsFromShapeCode(self, orientationIndex, translation):
         # This works but is not very DRY
         if orientationIndex == 0:
@@ -135,6 +153,15 @@ class ShapeCode:
 
     def __str__(self) -> str:
         return f'Shapecode({self.orientation}, {self.translation})'
+    
+    def getTranslatedShapeCode(self, translation) -> ShapeCode:
+        return ShapeCode(self.orientation, self.translation.add(translation))
+
+    def getFlippedShapeCode(self) -> ShapeCode:
+        return ShapeCode(flipIndex(self.orientation), self.translation.flip())
+    
+    def getRotatedShapeCode(self) -> ShapeCode:
+        return ShapeCode(rotateIndex(self.orientation), self.translation.rotate())
     
     def printMotionCanvas(self) -> str:
         return f'[[{self.translation.x},{self.translation.y}],{enumNames[self.orientation]}],'
@@ -220,18 +247,35 @@ allOrientations = ((0,0), (1,0), (2,0), (3,0),
 enumNames = ('TileType.F0', 'TileType.F90', 'TileType.F180', 'TileType.F270',
              'TileType.T0', 'TileType.T90', 'TileType.T180', 'TileType.T270')
 
+# unitVectors = (
+#     # Vector2(0, 0),
+#     Vector2(0, 1),
+#     Vector2(1, 1),
+#     Vector2(1, 0),
+#     Vector2(1, -1),
+#     Vector2(0, -1),
+#     Vector2(-1, -1),
+#     Vector2(-1, 0),
+#     Vector2(-1, 1),
+#     )
 unitVectors = (Vector2(1,0), Vector2(-1,0), Vector2(0,1), Vector2(0, -1), Vector2(1,1), Vector2(-1,-1), Vector2(1,-1), Vector2(-1,1))
-# coords = [[0, 0],
-# 		[1, 0], 
-# 		[2, 0], [2, 1], [2, 2],]
-coords =  [[0, 0],
-		[1, 0], [1, -1],
-		[2, -1], [2, -3],
-		[3, 0], [3, -1], [3, -2], [3, -3],
-		[4, -3],
-		[5, -2], [5, -3],
-		[6, -3]]
 
+
+# 22 secs
+coords = [
+		(0, -2),
+		(1, 0), (1, -1), (1, -2),
+		(2, 0), (2, -1), (2, -2),
+		(3, -2),
+		(4, -2), (4, -3),
+		(5, -3),
+	]
+priority = [
+	Vector2(3,-3),
+	Vector2(5,-2),
+	Vector2(0,-1),
+	Vector2(3,-1),
+]
 
 coordsAsVectors = set(Vector2(*coord) for coord in coords)
 
@@ -256,7 +300,21 @@ baseBoundary = baseTile.getBoundary(unitVectors)
 
 collisionData = CollisionData()
 collisionData.getCollisionsFromBaseOrientations( baseTile, baseOrientations )
-collisionsForBaseOrientations = collisionData.getCollisionsForBaseOrientations()
+
+baseTile.setShapeCode(ShapeCode(0, Vector2(0,0)))
+baseTile.setCollisionData(collisionData)
+
+# And we recompute the baseOrientations, now with correct collisions baked in
+baseOrientations = {
+    0:      baseTile,
+    1:      baseTile.getRotatedTile(),
+    2:      baseTile.getRotatedTile().getRotatedTile(),
+    3:      baseTile.getRotatedTile().getRotatedTile().getRotatedTile(),
+    4:      baseTile.getFlippedTile(),
+    5:      baseTile.getRotatedTile().getFlippedTile(),
+    6:      baseTile.getRotatedTile().getRotatedTile().getFlippedTile(),
+    7:      baseTile.getRotatedTile().getRotatedTile().getRotatedTile().getFlippedTile()
+}
 
 print('all collisions are computed')
 
@@ -269,20 +327,22 @@ print('all collisions are computed')
 # The baseConfiguration is a list of ShapeCodes,
 # we then want to find all the new ShapeCodes so that they cover the startCoord but not the  tiles in the baseConfiguration
 
+
+def doesNotCollide(translation, configuration, orientationIndex) -> bool:
+    for tileInConfiguration in configuration:
+        if translation in tileInConfiguration.collisionData.collisions[orientationIndex]:
+            return False
+    return True
+
 def getValidNewTiles(baseOrientations, configuration, startCoord: Vector2):
-    validNewTiles = set()
+    validNewTiles = []
     for orientationIndex, baseOrientation in baseOrientations.items():
         for coord in baseOrientation.coords:
-            doesNotCollide = True
-            for shapeCodeInConfiguration in configuration:
-                collisionsForShapeCodeInConfiguration = collisionsForBaseOrientations[shapeCodeInConfiguration.orientation].getTranslatedCollisions(shapeCodeInConfiguration.translation)
-                collisionsFromShapeCodeForOrientationIndex = collisionsForShapeCodeInConfiguration.collisions[orientationIndex]
-                translation = startCoord.subtract(coord)
-                if translation in collisionsFromShapeCodeForOrientationIndex:
-                    doesNotCollide = False
-                    break
-            if doesNotCollide:
-                validNewTiles.add( ShapeCode(orientationIndex, translation) )
+            translation = startCoord.subtract(coord)
+            if doesNotCollide(translation, configuration, orientationIndex):
+                newConfiguration = configuration.copy()
+                newConfiguration.append(baseOrientation.getTranslatedTile(translation))
+                validNewTiles.append( newConfiguration )
     return validNewTiles
 
 # We now have the valid new tiles, so we add these to get a new configuration.
@@ -302,8 +362,49 @@ def getNewBoundaryForValidNewTile(currentBoundary, baseOrientations, shapeCode: 
         newBoundary[count] = currentBoundary[count].difference(newTiles)
     return newBoundary
 
+def hidden():
+    baseConfiguration = Configuration( [ShapeCode(0, Vector2(0,0))], baseBoundary)
+    print('starting now!')
+    ans = baseConfiguration.dfs(baseOrientations)
+    print('finished!')
 
-baseConfiguration = Configuration( [ShapeCode(0, Vector2(0,0))], baseBoundary)
-print('starting now!')
-ans = baseConfiguration.dfs(baseOrientations)
-print('finished!')
+def old_stuff():
+    def occupied_in(startCoord, config):
+        config_squares = [ square for tile in config[1:] for square in tile.coords ]
+        return startCoord in config_squares
+    
+    # as the old code performs better, we rewrite some things to see what is the culprit
+    possible_configs = [[baseTile]]
+    outside_list = baseTile.getBoundaryAsList(unitVectors, priority)
+    for i in range(len(outside_list)):
+        startCoord = outside_list[i]
+        new_possible_configs = []
+        for config in possible_configs:
+            if occupied_in(startCoord, config):
+                new_possible_configs.append(config)
+            else:
+                validNewConfigs = getValidNewTiles(baseOrientations, config, startCoord)
+                new_possible_configs.extend(validNewConfigs)
+        if not new_possible_configs:
+            return []
+        possible_configs = new_possible_configs.copy()
+        print(len(possible_configs))
+    return possible_configs
+
+def test1():
+    start_time = time.time()
+    for _ in range(200):
+        getValidNewTiles(baseOrientations, [baseTile],Vector2(4,-2))
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+    ans = getValidNewTiles(baseOrientations, [baseTile],Vector2(4,-2))
+    for tile in ans:
+        print(tile.shapeCode)
+
+def test2():
+    start_time = time.time()
+    old_stuff()
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+test2()
+

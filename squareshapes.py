@@ -22,6 +22,9 @@ class Square:
 
     def flip(self):
         return Square(-self.x, self.y)
+    
+    def __str__(self) -> str:
+        return f'Vector2({self.x//2},{-1*self.y//2})'
 
 class FakePolyomino:
     def __init__(self, squares, shapecode = {"translation": (0, 0),"flipped": False,  "rotation": 0}):
@@ -46,7 +49,6 @@ class FakePolyomino:
         }
 
         return FakePolyomino(new_squares, shapecode = new_shapecode)
-
 
 class Polyomino:
     # These will be polyominoes
@@ -206,14 +208,16 @@ class Polyomino:
             return Polyomino(new_squares, shapecode = new_shapecode, collision_data = new_collision_data)
 
 
-    def corona_maker(self, base_orientations, heesch=False, printing=True):
-        def config_collision(coord, config, key):
-            if coord in self.collision_data[key]:
+    def config_collision(self, coord, config, key):
+        if coord in self.collision_data[key]:
+            return False
+        for shape in config:
+            if coord in shape.collision_data[key]:
                 return False
-            for shape in config:
-                if coord in shape.collision_data[key]:
-                    return False
-            return True
+        return True
+
+
+    def corona_maker(self, base_orientations, heesch=False, printing=True):
 
         def not_occupied_in(elem, config, extra = False):
             config_squares = self.squares.copy() if extra else []
@@ -247,7 +251,7 @@ class Polyomino:
                 key = key_dict[pre_key]
                 for ns_square in orientation.squares:
                     coord = (outs_square.x - ns_square.x, outs_square.y - ns_square.y)
-                    if config_collision(coord, config, key):
+                    if self.config_collision(coord, config, key):
                         new_config = config.copy()
                         new_config.append(orientation.translate(*coord))
                         new_possible_config.append(new_config)
@@ -564,3 +568,29 @@ def bigsquare_maker(x, y):
     Square(x-2, y-2),
     ]
     return squares
+
+def test_check_combinations(tile, base_orientations, config, outs_square):
+    new_possible_config = []
+
+    key_dict = {
+    "0F": 0,
+    "90F": 1,
+    "180F": 2,
+    "270F": 3,
+    "0T": 4,
+    "90T": 5,
+    "180T": 6,
+    "270T": 7,
+    }
+
+    for index in range(len(base_orientations)):
+        orientation = base_orientations[index]
+        pre_key = f"""{orientation.shapecode["rotation"]}{"T" if orientation.shapecode["flipped"] else "F"}"""
+        key = key_dict[pre_key]
+        for ns_square in orientation.squares:
+            coord = (outs_square.x - ns_square.x, outs_square.y - ns_square.y)
+            if tile.config_collision(coord, config, key):
+                new_possible_config.append(orientation.translate(*coord))
+            else:
+                continue
+    return new_possible_config
